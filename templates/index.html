@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Empathetic AI Chatbot with Voice</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Add some styles for the mic button */
+        #mic-btn {
+            background-color: #4CAF50; /* Green for mic */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+        #mic-btn.recording {
+            background-color: #f44336; /* Red when recording */
+        }
+        #mic-btn:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        #mic-btn:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container" id="chat-container">
+        <div class="chat-header">
+            <h1>Empathetic AI Therapist Bot (Voice Enabled)</h1>
+            <p class="disclaimer">
+                👋 I'm an AI assistant here to listen and offer support. 
+                Please remember I am not a licensed therapist and cannot provide medical advice or diagnose conditions.
+                If you are in crisis or need urgent help, please contact a mental health professional or emergency services.
+            </p>
+        </div>
+        <div class="chat-box" id="chat-box">
+            </div>
+        <div class="chat-input-area">
+            <textarea id="user-input" placeholder="Type or speak your message..."></textarea>
+            <button id="send-btn">Send</button>
+            <button id="mic-btn">🎙️ Speak</button> <button id="reset-btn">Reset Chat</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const micBtn = document.getElementById('mic-btn'); // Get mic button
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Sentiment colors (same as before)
+        const sentimentColors = {
+            'neutral': '#fdfdff',
+            'positive': '#e8f5e9',
+            'negative': '#ffebee',
+            'sad': '#e3f2fd',
+            'anxious': '#fffde7',
+            'angry': '#fff3e0',
+            'hopeful': '#e0f2f7',
+            'calm': '#e0f7fa'
+        };
+
+        let isRecording = false;
+        let recognition; // For Web Speech Recognition API
+        let synth = window.speechSynthesis; // For Web Speech Synthesis API
+
+        // --- Voice Setup ---
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = false; // Only record one phrase at a time
+            recognition.interimResults = false; // Only return final results
+            recognition.lang = 'en-US'; // Set language
+
+            recognition.onstart = () => {
+                isRecording = true;
+                micBtn.classList.add('recording');
+                micBtn.textContent = '🔴 Recording...';
+                console.log('Voice recognition started.');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                userInput.value = transcript; // Put transcribed text into input
+                sendMessage(); // Automatically send after speech detected
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error', event.error);
+                appendMessage('bot-message', 'Sorry, I couldn\'t understand your voice. Please try typing or speaking again.');
+                stopRecording(); // Stop on error
+            };
+
+            recognition.onend = () => {
+                console.log('Voice recognition ended.');
+                if (isRecording) { // Only change button if it was actively recording
+                   stopRecording();
+                }
+            };
+
+            micBtn.addEventListener('click', () => {
+                if (!isRecording) {
+                    startRecording();
+                } else {
+                    stopRecording();
+                }
+            });
+
+        } else {
+            console.warn('Web Speech API not supported in this browser.');
+            micBtn.style.display = 'none'; // Hide mic button if not supported
+            appendMessage('bot-message', 'Your browser does not support voice input. Please use the text box.');
+        }
+
+        function startRecording() {
+            chatBox.scrollTop = chatBox.scrollHeight; // Keep chatbox scrolled to bottom
+            micBtn.classList.add('recording');
+            micBtn.textContent = '🔴 Recording...';
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error("Error starting speech recognition:", e);
+                appendMessage('bot-message', 'Could not start voice input. Please ensure microphone permissions are granted.');
+                stopRecording(); // Reset button if error
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            micBtn.classList.remove('recording');
+            micBtn.textContent = '🎙️ Speak';
+            recognition.stop(); // Stop the recognition explicitly
+        }
+
+        function speak(text) {
+            if (!synth) {
+                console.warn("SpeechSynthesis not available.");
+                return;
+            }
+            // Clear any existing utterances
+            synth.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.pitch = 1.0; // Default pitch (0.5 to 2.0)
+            utterance.rate = 1.0;  // Default rate (0.1 to 10.0)
+
+            // --- Basic Voice Modulation (Therapeutic Tone) ---
+            // This is a simple, fixed modulation for a calm, empathetic voice.
+            // For true emotional modulation, you'd need a more advanced TTS API
+            // that supports SSML emotional tags or trained voice models.
+            // Here, we slightly lower pitch and rate for a calm effect.
+            utterance.pitch = 0.95; // Slightly lower pitch for a calm voice
+            utterance.rate = 0.9;   // Slightly slower rate for clarity and calm
+
+            // You could potentially pick a specific voice if available
+            // let voices = synth.getVoices();
+            // let therapeuticVoice = voices.find(voice => voice.name.includes('Google US English')); // Example
+            // if (therapeuticVoice) {
+            //     utterance.voice = therapeuticVoice;
+            // }
+
+            synth.speak(utterance);
+        }
+
+        // --- Existing Chat Logic ---
+        function appendMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function setChatBackground(sentiment) {
+            const color = sentimentColors[sentiment] || sentimentColors['neutral'];
+            chatContainer.style.transition = 'background-color 0.5s ease';
+            chatContainer.style.backgroundColor = color;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message === '') return;
+
+            appendMessage('user-message', message);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    appendMessage('bot-message', data.response);
+                    if (data.sentiment) {
+                        setChatBackground(data.sentiment);
+                    }
+                    speak(data.response); // Make the bot speak its response
+                } else {
+                    appendMessage('bot-message', `Error: ${data.response || 'Something went wrong.'}`);
+                    setChatBackground('neutral');
+                    speak('I am sorry, but I encountered an error.');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                appendMessage('bot-message', 'I am having trouble connecting. Please try again.');
+                setChatBackground('neutral');
+                speak('I am having trouble connecting.');
+            }
+        }
+
+        async function resetChat() {
+            if (confirm("Are you sure you want to reset the chat? This will clear all messages.")) {
+                try {
+                    const response = await fetch('/reset', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        chatBox.innerHTML = '';
+                        appendMessage('bot-message', 'Chat has been reset. How can I help you today?');
+                        setChatBackground('neutral');
+                        speak('Chat has been reset. How can I help you today?');
+                    } else {
+                        alert(`Error resetting chat: ${data.status || 'Something went wrong.'}`);
+                    }
+                } catch (error) {
+                    console.error('Error resetting chat:', error);
+                    alert('Could not reset chat. Please refresh the page.');
+                }
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        resetBtn.addEventListener('click', resetChat);
+
+        // Initial welcome message from the bot and initial background color
+        appendMessage('bot-message', "Hello! I'm here to listen. How are you feeling today?");
+        setChatBackground('neutral');
+        // Initial spoken message from the bot
+        speak("Hello! I'm here to listen. How are you feeling today?");
+
+    </script>
+</body>
+</html>
